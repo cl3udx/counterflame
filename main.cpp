@@ -11,17 +11,17 @@
 #if __has_include(<imgui.h>)
 #include <imgui.h>
 #else
-// Заглушка на случай отсутствия заголовков на сервере сборки
+// Заглушка с правильной сигнатурой Combo для массивов
 namespace ImGui {
     inline bool Begin(const char* name, bool* p_open = nullptr, int flags = 0) { return true; }
     inline void End() {}
     inline bool BeginTabBar(const char* str_id, int flags = 0) { return true; }
-    inline void EndTabBar() {}
+    inline bool EndTabBar() {}
     inline bool BeginTabItem(const char* label, bool* p_open = nullptr, int flags = 0) { return true; }
     inline void EndTabItem() {}
     inline bool Checkbox(const char* label, bool* v) { return false; }
     inline bool SliderFloat(const char* label, float* v, float v_min, float v_max, const char* format = "%.3f", int flags = 0) { return false; }
-    inline bool Combo(const char* label, int* current_item, const char* const items[], int items_count, int popup_max_height_in_items = -1) { return false; }
+    inline bool Combo(const char* label, int* current_item, const char* const items[], int items_count, int height_in_items = -1) { return false; }
     inline void Text(const char* fmt, ...) {}
     inline void Separator() {}
     inline void SetNextWindowSize(ImGui::ImVec2 size, int cond = 0) {}
