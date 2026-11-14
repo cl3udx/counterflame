@@ -4,12 +4,11 @@ project(CounterFlameDylib CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+file(GLOB IMGUI_SOURCES "imgui/*.cpp")
+
 set(SOURCES
     main.cpp
-    imgui/imgui.cpp
-    imgui/imgui_draw.cpp
-    imgui/imgui_tables.cpp
-    imgui/imgui_widgets.cpp
+    ${IMGUI_SOURCES}
 )
 
 add_library(CounterFlameDylib SHARED ${SOURCES})
