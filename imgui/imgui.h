@@ -24,6 +24,7 @@ enum ImGuiWindowFlags_ {
     ImGuiWindowFlags_NoCollapse = 1 << 5,
     ImGuiWindowFlags_AlwaysAutoResize = 1 << 6,
 };
+typedef int ImGuiWindowFlags;
 
 enum ImGuiCol_ {
     ImGuiCol_WindowBg,
@@ -37,6 +38,7 @@ enum ImGuiCol_ {
     ImGuiCol_SliderGrabActive,
     ImGuiCol_COUNT
 };
+typedef int ImGuiCol;
 
 enum ImGuiStyleVar_ {
     ImGuiStyleVar_WindowRounding,
@@ -44,12 +46,14 @@ enum ImGuiStyleVar_ {
     ImGuiStyleVar_FrameRounding,
     ImGuiStyleVar_COUNT
 };
+typedef int ImGuiStyleVar;
 
 enum ImGuiCond_ {
     ImGuiCond_Always = 1 << 0,
     ImGuiCond_Once = 1 << 1,
     ImGuiCond_FirstUseEver = 1 << 2,
 };
+typedef int ImGuiCond;
 
 struct ImGuiStyle {
     float WindowRounding;
