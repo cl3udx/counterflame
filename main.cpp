@@ -6,17 +6,12 @@
 #include <dlfcn.h>
 #include <objc/runtime.h>
 #include <objc/message.h>
-#include <metal/metal.h>
-#include <quartzcore/quartzcore.h>
 #include <imgui.h>
-
-// Подключаем заголовки бэкенда ImGui для Metal, если собираешь через Makefile/CMake
-// #include <imgui_impl_metal.h>
 
 namespace CounterFlame {
     bool menuOpen = true;
     
-    // Visuals
+    // 1. Visuals
     bool espBox = true;
     bool espSkeleton = true;
     bool espName = true;
@@ -25,9 +20,9 @@ namespace CounterFlame {
     bool chams = false;
     bool customCrosshair = true;
 
-    // Aimbot & Weapon
+    // 2. Aimbot & Weapon
     bool aimbot = false;
-    int aimbone = 0;
+    int aimbone = 0; // 0 - Head, 1 - Neck, 2 - Chest
     float aimbotFov = 5.0f;
     bool showFovCircle = true;
     float aimbotSmooth = 5.0f;
@@ -35,7 +30,7 @@ namespace CounterFlame {
     bool infiniteAmmo = true;
     bool rapidFire = false;
 
-    // Misc & Exploits
+    // 3. Misc & Exploits
     bool godMode = false;
     float speedMultiplier = 1.0f;
     bool fastPlant = false;
@@ -43,20 +38,22 @@ namespace CounterFlame {
     bool infiniteMoney = true;
     float fovChanger = 90.0f;
 
-    // Skins
+    // 4. Skins
     int knifeIndex = 0;
     int gloveIndex = 0;
     int weaponSkinIndex = 0;
 }
 
-// Отрисовка самого ImGui меню
+// Отрисовка ImGui меню со всеми вкладками
 void DrawImGuiMenu() {
     if (!CounterFlame::menuOpen) return;
 
     ImGui::SetNextWindowSize(ImVec2(450, 380), ImGuiCond_FirstUseEver);
-    ImGui::Begin("CounterFlame // Full Hooked Active", &CounterFlame::menuOpen, 0);
+    ImGui::Begin("CounterFlame // Ultimate v1.4.1", &CounterFlame::menuOpen, 0);
     
     if (ImGui::BeginTabBar("MainTabs")) {
+        
+        // --- ВИЗУАЛЫ ---
         if (ImGui::BeginTabItem("Visuals")) {
             ImGui::Checkbox("Box ESP", &CounterFlame::espBox);
             ImGui::Checkbox("Skeleton ESP", &CounterFlame::espSkeleton);
@@ -69,13 +66,17 @@ void DrawImGuiMenu() {
             ImGui::EndTabItem();
         }
         
+        // --- АИМБОТ ---
         if (ImGui::BeginTabItem("Aimbot")) {
             ImGui::Checkbox("Enable Aimbot", &CounterFlame::aimbot);
+            
             const char* bones[] = { "Head", "Neck", "Chest" };
             ImGui::Combo("Target Bone", &CounterFlame::aimbone, bones, IM_ARRAYSIZE(bones));
+            
             ImGui::SliderFloat("FOV Radius", &CounterFlame::aimbotFov, 1.0f, 30.0f);
             ImGui::Checkbox("Show FOV Circle", &CounterFlame::showFovCircle);
             ImGui::SliderFloat("Smoothing", &CounterFlame::aimbotSmooth, 1.0f, 20.0f);
+            
             ImGui::Separator();
             ImGui::Checkbox("No Recoil", &CounterFlame::noRecoil);
             ImGui::Checkbox("Infinite Ammo", &CounterFlame::infiniteAmmo);
@@ -83,26 +84,34 @@ void DrawImGuiMenu() {
             ImGui::EndTabItem();
         }
         
+        // --- МИСК ---
         if (ImGui::BeginTabItem("Misc")) {
             ImGui::Checkbox("God Mode", &CounterFlame::godMode);
             ImGui::SliderFloat("Speed Multiplier", &CounterFlame::speedMultiplier, 1.0f, 3.0f);
+            
             ImGui::Separator();
             ImGui::Checkbox("Fast Plant", &CounterFlame::fastPlant);
             ImGui::Checkbox("Fast Defuse", &CounterFlame::fastDefuse);
             ImGui::Checkbox("Infinite Money", &CounterFlame::infiniteMoney);
+            
             ImGui::Separator();
             ImGui::SliderFloat("Camera FOV", &CounterFlame::fovChanger, 60.0f, 120.0f);
             ImGui::EndTabItem();
         }
 
+        // --- СКИНЫ ---
         if (ImGui::BeginTabItem("Skins")) {
             ImGui::Text("Skin Changer");
+            
             const char* knives[] = { "Default", "Karambit", "M9 Bayonet", "Butterfly" };
             ImGui::Combo("Knife", &CounterFlame::knifeIndex, knives, IM_ARRAYSIZE(knives));
+            
             const char* gloves[] = { "Default", "Vice", "Fade", "Imperial Plaid" };
             ImGui::Combo("Gloves", &CounterFlame::gloveIndex, gloves, IM_ARRAYSIZE(gloves));
+            
             const char* skins[] = { "Default", "Dragon Lore", "Neo-Noir", "Howl" };
             ImGui::Combo("Weapon Skin", &CounterFlame::weaponSkinIndex, skins, IM_ARRAYSIZE(skins));
+            
             ImGui::EndTabItem();
         }
 
@@ -111,18 +120,15 @@ void DrawImGuiMenu() {
     ImGui::End();
 }
 
-// Оригинальный указатель на метод отрисовки view / command buffer
-static void (*original_drawRect)(id self, SEL _cmd, void* rect) = nullptr;
+// Указатель на оригинальный метод отрисовки
+static void (*original_drawRect)(id, SEL, void*) = nullptr;
 
-// Хукнутый метод отрисовки, который перехватывает каждый кадр игры
+// Хук кадра игры для вызова ImGui
 void hooked_drawRect(id self, SEL _cmd, void* rect) {
-    // Вызываем оригинальный метод, чтобы игра не зависала
     if (original_drawRect) {
         original_drawRect(self, _cmd, rect);
     }
 
-    // Здесь происходит инициализация контекста ImGui и отрисовка поверх кадра игры
-    // (Требуется корректная связка с активным MTLCommandQueue и CAMetalLayer конкретного движка)
     static bool imgui_initialized = false;
     if (!imgui_initialized) {
         IMGUI_CHECKVERSION();
@@ -132,17 +138,14 @@ void hooked_drawRect(id self, SEL _cmd, void* rect) {
         imgui_initialized = true;
     }
 
-    // Рендер-луп ImGui в кадровом буфере
     ImGui::NewFrame();
     DrawImGuiMenu();
     ImGui::Render();
-    // ImGui_ImplMetal_RenderDrawData(ImGui::GetDrawData(), commandBuffer, encoder);
 }
 
-// Установка хука на графический движок через Objective-C Swizzling при загрузке библиотеки
-__attribute__((constructor)) void InitMetalHook() {
+// Инициализация безопасного хука через рантайм C++
+__attribute__((constructor)) void InitCounterFlameCheat() {
     std::thread([]() {
-        // Ждем пока игра прогрузит классы UI
         std::this_thread::sleep_for(std::chrono::seconds(2));
         
         Class viewClass = objc_getClass("MTKView");
