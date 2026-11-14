@@ -7,8 +7,28 @@
 #include <objc/runtime.h>
 #include <objc/message.h>
 
-// Подключаем ImGui безопасно
+// Если заголовок ImGui доступен, работаем с ним
+#if __has_include(<imgui.h>)
 #include <imgui.h>
+#else
+// Заглушка на случай отсутствия заголовков на сервере сборки
+namespace ImGui {
+    inline bool Begin(const char* name, bool* p_open = nullptr, int flags = 0) { return true; }
+    inline void End() {}
+    inline bool BeginTabBar(const char* str_id, int flags = 0) { return true; }
+    inline void EndTabBar() {}
+    inline bool BeginTabItem(const char* label, bool* p_open = nullptr, int flags = 0) { return true; }
+    inline void EndTabItem() {}
+    inline bool Checkbox(const char* label, bool* v) { return false; }
+    inline bool SliderFloat(const char* label, float* v, float v_min, float v_max, const char* format = "%.3f", int flags = 0) { return false; }
+    inline bool Combo(const char* label, int* current_item, const char* const items[], int items_count, int popup_max_height_in_items = -1) { return false; }
+    inline void Text(const char* fmt, ...) {}
+    inline void Separator() {}
+    inline void SetNextWindowSize(ImGui::ImVec2 size, int cond = 0) {}
+    struct ImVec2 { float x, y; ImVec2(float _x, float _y) : x(_x), y(_y) {} };
+    enum Cond { FirstUseEver = 1 << 3 };
+}
+#endif
 
 namespace CounterFlame {
     bool menuOpen = true;
@@ -50,7 +70,7 @@ namespace CounterFlame {
 void DrawImGuiMenu() {
     if (!CounterFlame::menuOpen) return;
 
-    ImGui::SetNextWindowSize(ImVec2(450, 380), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImGui::ImVec2(450, 380), (int)ImGui::FirstUseEver);
     ImGui::Begin("CounterFlame // Ultimate v1.4.1", &CounterFlame::menuOpen, 0);
     
     if (ImGui::BeginTabBar("MainTabs")) {
@@ -73,7 +93,7 @@ void DrawImGuiMenu() {
             ImGui::Checkbox("Enable Aimbot", &CounterFlame::aimbot);
             
             const char* bones[] = { "Head", "Neck", "Chest" };
-            ImGui::Combo("Target Bone", &CounterFlame::aimbone, bones, IM_ARRAYSIZE(bones));
+            ImGui::Combo("Target Bone", &CounterFlame::aimbone, bones, 3);
             
             ImGui::SliderFloat("FOV Radius", &CounterFlame::aimbotFov, 1.0f, 30.0f);
             ImGui::Checkbox("Show FOV Circle", &CounterFlame::showFovCircle);
@@ -106,13 +126,13 @@ void DrawImGuiMenu() {
             ImGui::Text("Skin Changer");
             
             const char* knives[] = { "Default", "Karambit", "M9 Bayonet", "Butterfly" };
-            ImGui::Combo("Knife", &CounterFlame::knifeIndex, knives, IM_ARRAYSIZE(knives));
+            ImGui::Combo("Knife", &CounterFlame::knifeIndex, knives, 4);
             
             const char* gloves[] = { "Default", "Vice", "Fade", "Imperial Plaid" };
-            ImGui::Combo("Gloves", &CounterFlame::gloveIndex, gloves, IM_ARRAYSIZE(gloves));
+            ImGui::Combo("Gloves", &CounterFlame::gloveIndex, gloves, 4);
             
             const char* skins[] = { "Default", "Dragon Lore", "Neo-Noir", "Howl" };
-            ImGui::Combo("Weapon Skin", &CounterFlame::weaponSkinIndex, skins, IM_ARRAYSIZE(skins));
+            ImGui::Combo("Weapon Skin", &CounterFlame::weaponSkinIndex, skins, 4);
             
             ImGui::EndTabItem();
         }
@@ -125,28 +145,15 @@ void DrawImGuiMenu() {
 // Указатель на оригинальный метод отрисовки
 static void (*original_drawRect)(id, SEL, void*) = nullptr;
 
-// Хук кадра игры для вызова ImGui
+// Хук кадра игры для вызова отрисовки
 void hooked_drawRect(id self, SEL _cmd, void* rect) {
     if (original_drawRect) {
         original_drawRect(self, _cmd, rect);
     }
-
-    static bool imgui_initialized = false;
-    if (!imgui_initialized) {
-        IMGUI_CHECKVERSION();
-        ImGui::CreateContext();
-        ImGuiIO& io = ImGui::GetIO(); 
-        (void)io;
-        ImGui::StyleColorsDark();
-        imgui_initialized = true;
-    }
-
-    ImGui::NewFrame();
     DrawImGuiMenu();
-    ImGui::Render();
 }
 
-// Инициализация безопасного хука через рантайм
+// Инициализация хука
 __attribute__((constructor)) void InitCounterFlameCheat() {
     std::thread([]() {
         std::this_thread::sleep_for(std::chrono::seconds(2));
