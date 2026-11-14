@@ -6,6 +6,8 @@
 #include <dlfcn.h>
 #include <objc/runtime.h>
 #include <objc/message.h>
+
+// Подключаем ImGui безопасно
 #include <imgui.h>
 
 namespace CounterFlame {
@@ -22,7 +24,7 @@ namespace CounterFlame {
 
     // 2. Aimbot & Weapon
     bool aimbot = false;
-    int aimbone = 0; // 0 - Head, 1 - Neck, 2 - Chest
+    int aimbone = 0;
     float aimbotFov = 5.0f;
     bool showFovCircle = true;
     float aimbotSmooth = 5.0f;
@@ -133,7 +135,8 @@ void hooked_drawRect(id self, SEL _cmd, void* rect) {
     if (!imgui_initialized) {
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
-        ImGuiIO& io = ImGui::GetIO(); (void)io;
+        ImGuiIO& io = ImGui::GetIO(); 
+        (void)io;
         ImGui::StyleColorsDark();
         imgui_initialized = true;
     }
@@ -143,7 +146,7 @@ void hooked_drawRect(id self, SEL _cmd, void* rect) {
     ImGui::Render();
 }
 
-// Инициализация безопасного хука через рантайм C++
+// Инициализация безопасного хука через рантайм
 __attribute__((constructor)) void InitCounterFlameCheat() {
     std::thread([]() {
         std::this_thread::sleep_for(std::chrono::seconds(2));
