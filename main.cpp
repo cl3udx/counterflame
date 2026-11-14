@@ -4,15 +4,15 @@
 #include <cmath>
 #include <cstring>
 #include <mach/mach.h>
-#include <mach-dyld.h>
 #include <sys/mman.h>
+#include <dlfcn.h>
 #include <imgui.h>
 
 // ==========================================
 // 1. CONFIG & OFFSETS (Ground Truth)
 // ==========================================
 namespace config {
-    // Build-dependent offsets: UNKNOWN until measured on actual CounterFlame binary
+    // Build-dependent offsets
     inline constexpr uintptr_t kGWorldOffset       = 0x0;
     inline constexpr uintptr_t kLocalPlayerOffset  = 0x0;
     inline constexpr uintptr_t kPlayerController   = 0x0;
@@ -64,13 +64,9 @@ namespace config {
 // ==========================================
 namespace memory {
     inline uintptr_t GetModuleBase(const char* moduleName) {
-        uint32_t count = _dyld_image_count();
-        for (uint32_t i = 0; i < count; ++i) {
-            const char* name = _dyld_get_image_name(i);
-            if (name && strstr(name, moduleName)) {
-                return static_cast<uintptr_t>(_dyld_get_image_header_slide(i) + 
-                       reinterpret_cast<uintptr_t>(_dyld_get_image_header(i)));
-            }
+        Dl_info info;
+        if (dladdr(reinterpret_cast<void*>(GetModuleBase), &info) && info.dli_fname) {
+            return reinterpret_cast<uintptr_t>(info.dli_fbase);
         }
         return 0;
     }
@@ -115,9 +111,9 @@ namespace menu {
         ImGui::Begin("##FloatingToggleWindow", nullptr, flags);
 
         ImVec4 neonColor = config::bRainbowAccent ? 
-            ImVec4(sinf(ImGui::GetTime() * 2.0f) * 0.3f + 0.7f, 
-                   sinf(ImGui::GetTime() * 2.0f + 2.094f) * 0.3f + 0.7f, 
-                   sinf(ImGui::GetTime() * 2.0f + 4.188f) * 0.3f + 0.7f, 1.0f) : 
+            ImVec4(sinf(static_cast<float>(ImGui::GetTime()) * 2.0f) * 0.3f + 0.7f, 
+                   sinf(static_cast<float>(ImGui::GetTime()) * 2.0f + 2.094f) * 0.3f + 0.7f, 
+                   sinf(static_cast<float>(ImGui::GetTime()) * 2.0f + 4.188f) * 0.3f + 0.7f, 1.0f) : 
             ImVec4(0.00f, 0.80f, 1.00f, 1.00f);
 
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.12f, 0.12f, 0.16f, 0.90f));
@@ -139,9 +135,9 @@ namespace menu {
         if (!config::bMenuVisible) return;
 
         ImVec4 accentColor = config::bRainbowAccent ? 
-            ImVec4(sinf(ImGui::GetTime() * 1.5f) * 0.3f + 0.7f, 
-                   sinf(ImGui::GetTime() * 1.5f + 2.094f) * 0.3f + 0.7f, 
-                   sinf(ImGui::GetTime() * 1.5f + 4.188f) * 0.3f + 0.7f, 1.0f) : 
+            ImVec4(sinf(static_cast<float>(ImGui::GetTime()) * 1.5f) * 0.3f + 0.7f, 
+                   sinf(static_cast<float>(ImGui::GetTime()) * 1.5f + 2.094f) * 0.3f + 0.7f, 
+                   sinf(static_cast<float>(ImGui::GetTime()) * 1.5f + 4.188f) * 0.3f + 0.7f, 1.0f) : 
             ImVec4(0.00f, 0.80f, 1.00f, 1.00f);
 
         ImGuiStyle& style = ImGui::GetStyle();
