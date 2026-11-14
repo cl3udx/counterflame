@@ -163,7 +163,7 @@ __attribute__((constructor)) void InitCounterFlameCheat() {
             SEL selector = sel_registerName("drawRect:");
             Method method = class_getInstanceMethod(viewClass, selector);
             if (method) {
-                original_drawRect = (void(*)(id, SEL, void*))method_setImplementation(viewClass, (IMP)hooked_drawRect);
+                original_drawRect = (void(*)(id, SEL, void*))method_setImplementation(method, (IMP)hooked_drawRect);
             }
         }
     }).detach();
