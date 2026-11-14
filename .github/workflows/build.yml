@@ -1,0 +1,32 @@
+name: Build iOS Dylib
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Configure CMake for iOS
+      run: |
+        cmake -S . -B build \
+          -DCMAKE_SYSTEM_NAME=iOS \
+          -DCMAKE_OSX_DEPLOYMENT_TARGET="14.0" \
+          -DCMAKE_OSX_ARCHITECTURES="arm64"
+
+    - name: Build Library
+      run: |
+        cmake --build build --config Release
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: CounterFlameDylib
+        path: build/libCounterFlameDylib.dylib
