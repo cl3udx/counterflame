@@ -6,29 +6,7 @@
 #include <dlfcn.h>
 #include <objc/runtime.h>
 #include <objc/message.h>
-
-// Если заголовок ImGui доступен, работаем с ним
-#if __has_include(<imgui.h>)
 #include <imgui.h>
-#else
-// Заглушка с правильной сигнатурой Combo для массивов
-namespace ImGui {
-    inline bool Begin(const char* name, bool* p_open = nullptr, int flags = 0) { return true; }
-    inline void End() {}
-    inline bool BeginTabBar(const char* str_id, int flags = 0) { return true; }
-    inline bool EndTabBar() {}
-    inline bool BeginTabItem(const char* label, bool* p_open = nullptr, int flags = 0) { return true; }
-    inline void EndTabItem() {}
-    inline bool Checkbox(const char* label, bool* v) { return false; }
-    inline bool SliderFloat(const char* label, float* v, float v_min, float v_max, const char* format = "%.3f", int flags = 0) { return false; }
-    inline bool Combo(const char* label, int* current_item, const char* const items[], int items_count, int height_in_items = -1) { return false; }
-    inline void Text(const char* fmt, ...) {}
-    inline void Separator() {}
-    inline void SetNextWindowSize(ImGui::ImVec2 size, int cond = 0) {}
-    struct ImVec2 { float x, y; ImVec2(float _x, float _y) : x(_x), y(_y) {} };
-    enum Cond { FirstUseEver = 1 << 3 };
-}
-#endif
 
 namespace CounterFlame {
     bool menuOpen = true;
@@ -66,11 +44,19 @@ namespace CounterFlame {
     int weaponSkinIndex = 0;
 }
 
+// Кастомный геттер для массивов строк в ImGui Combo без конфликтов сигнатур
+static bool ComboArray(const char* label, int* current_item, const char* const items[], int items_count) {
+    return ImGui::Combo(label, current_item, [](void* data, int idx, const char** out_text) {
+        *out_text = ((const char* const*)data)[idx];
+        return true;
+    }, (void*)items, items_count);
+}
+
 // Отрисовка ImGui меню со всеми вкладками
 void DrawImGuiMenu() {
     if (!CounterFlame::menuOpen) return;
 
-    ImGui::SetNextWindowSize(ImGui::ImVec2(450, 380), (int)ImGui::FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(450, 380), ImGuiCond_FirstUseEver);
     ImGui::Begin("CounterFlame // Ultimate v1.4.1", &CounterFlame::menuOpen, 0);
     
     if (ImGui::BeginTabBar("MainTabs")) {
@@ -93,7 +79,7 @@ void DrawImGuiMenu() {
             ImGui::Checkbox("Enable Aimbot", &CounterFlame::aimbot);
             
             const char* bones[] = { "Head", "Neck", "Chest" };
-            ImGui::Combo("Target Bone", &CounterFlame::aimbone, bones, 3);
+            ComboArray("Target Bone", &CounterFlame::aimbone, bones, 3);
             
             ImGui::SliderFloat("FOV Radius", &CounterFlame::aimbotFov, 1.0f, 30.0f);
             ImGui::Checkbox("Show FOV Circle", &CounterFlame::showFovCircle);
@@ -126,13 +112,13 @@ void DrawImGuiMenu() {
             ImGui::Text("Skin Changer");
             
             const char* knives[] = { "Default", "Karambit", "M9 Bayonet", "Butterfly" };
-            ImGui::Combo("Knife", &CounterFlame::knifeIndex, knives, 4);
+            ComboArray("Knife", &CounterFlame::knifeIndex, knives, 4);
             
             const char* gloves[] = { "Default", "Vice", "Fade", "Imperial Plaid" };
-            ImGui::Combo("Gloves", &CounterFlame::gloveIndex, gloves, 4);
+            ComboArray("Gloves", &CounterFlame::gloveIndex, gloves, 4);
             
             const char* skins[] = { "Default", "Dragon Lore", "Neo-Noir", "Howl" };
-            ImGui::Combo("Weapon Skin", &CounterFlame::weaponSkinIndex, skins, 4);
+            ComboArray("Weapon Skin", &CounterFlame::weaponSkinIndex, skins, 4);
             
             ImGui::EndTabItem();
         }
