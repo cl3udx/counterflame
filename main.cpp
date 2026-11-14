@@ -1,239 +1,157 @@
 #include <iostream>
 #include <thread>
 #include <chrono>
-#include <cmath>
-#include <cstring>
-#include <mach/mach.h>
-#include <sys/mman.h>
+#include <vector>
+#include <string>
 #include <dlfcn.h>
+#include <objc/runtime.h>
+#include <objc/message.h>
+#include <metal/metal.h>
+#include <quartzcore/quartzcore.h>
 #include <imgui.h>
 
-// ==========================================
-// 1. CONFIG & OFFSETS (Ground Truth)
-// ==========================================
-namespace config {
-    // Build-dependent offsets
-    inline constexpr uintptr_t kGWorldOffset       = 0x0;
-    inline constexpr uintptr_t kLocalPlayerOffset  = 0x0;
-    inline constexpr uintptr_t kPlayerController   = 0x0;
-    inline constexpr uintptr_t kAcknowledgedPawn   = 0x0;
-    inline constexpr uintptr_t kPlayerCameraManager= 0x0;
-    inline constexpr uintptr_t kActorListOffset    = 0x0;
-    inline constexpr uintptr_t kRoundManagerOffset = 0x0;
+// Подключаем заголовки бэкенда ImGui для Metal, если собираешь через Makefile/CMake
+// #include <imgui_impl_metal.h>
 
-    // Feature Toggles
-    inline bool bMenuVisible       = false;
-    inline bool bEspBox            = true;
-    inline bool bEspSkeleton       = true;
-    inline bool bEspName           = true;
-    inline bool bEspHealth         = true;
-    inline bool bEspDistance       = true;
-    inline bool bEspLoot           = false;
-    inline bool bRadar             = false;
-    inline bool bChams             = false;
+namespace CounterFlame {
+    bool menuOpen = true;
     
-    inline bool bAimbot            = false;
-    inline float fAimbotFov        = 4.5f;
-    inline float fAimbotSmooth     = 6.0f;
-    inline bool bShowFovCircle     = true;
-    
-    inline bool bNoRecoil          = true;
-    inline bool bInfiniteAmmo      = false;
-    inline bool bGodMode           = false;
-    inline bool bSpeedhack         = false;
-    inline float fSpeedMultiplier  = 1.15f;
-    
-    // Visuals & Effects
-    inline bool bCustomCrosshair   = true;
-    inline int  iCrosshairStyle    = 0; // 0 - Dot, 1 - Cross
-    inline bool bRainbowAccent     = true;
-    inline bool bHitmarker         = true;
+    // Visuals
+    bool espBox = true;
+    bool espSkeleton = true;
+    bool espName = true;
+    bool espDistance = true;
+    bool espHealth = true;
+    bool chams = false;
+    bool customCrosshair = true;
 
-    // Match Exploits & Hardcore
-    inline bool bAutoWin           = false;
-    inline bool bFastPlantDefuse   = false;
-    inline bool bServerCrashFlood  = false;
-    inline bool bLagSwitch         = false;
-    inline bool bInvisibleMode     = false;
-    inline bool bSkinChanger       = true;
-    inline bool bInfiniteMoney     = true;
+    // Aimbot & Weapon
+    bool aimbot = false;
+    int aimbone = 0;
+    float aimbotFov = 5.0f;
+    bool showFovCircle = true;
+    float aimbotSmooth = 5.0f;
+    bool noRecoil = true;
+    bool infiniteAmmo = true;
+    bool rapidFire = false;
+
+    // Misc & Exploits
+    bool godMode = false;
+    float speedMultiplier = 1.0f;
+    bool fastPlant = false;
+    bool fastDefuse = false;
+    bool infiniteMoney = true;
+    float fovChanger = 90.0f;
+
+    // Skins
+    int knifeIndex = 0;
+    int gloveIndex = 0;
+    int weaponSkinIndex = 0;
 }
 
-// ==========================================
-// 2. MEMORY & VIRTUAL MACHINE WRAPPER
-// ==========================================
-namespace memory {
-    inline uintptr_t GetModuleBase(const char* moduleName) {
-        Dl_info info;
-        if (dladdr(reinterpret_cast<void*>(GetModuleBase), &info) && info.dli_fname) {
-            return reinterpret_cast<uintptr_t>(info.dli_fbase);
-        }
-        return 0;
-    }
+// Отрисовка самого ImGui меню
+void DrawImGuiMenu() {
+    if (!CounterFlame::menuOpen) return;
 
-    template <typename T>
-    inline T Read(uintptr_t address) {
-        if (!address) return T{};
-        try {
-            return *reinterpret_cast<T*>(address);
-        } catch (...) {
-            return T{};
+    ImGui::SetNextWindowSize(ImVec2(450, 380), ImGuiCond_FirstUseEver);
+    ImGui::Begin("CounterFlame // Full Hooked Active", &CounterFlame::menuOpen, 0);
+    
+    if (ImGui::BeginTabBar("MainTabs")) {
+        if (ImGui::BeginTabItem("Visuals")) {
+            ImGui::Checkbox("Box ESP", &CounterFlame::espBox);
+            ImGui::Checkbox("Skeleton ESP", &CounterFlame::espSkeleton);
+            ImGui::Checkbox("Name Tags", &CounterFlame::espName);
+            ImGui::Checkbox("Distance ESP", &CounterFlame::espDistance);
+            ImGui::Checkbox("Health Bar", &CounterFlame::espHealth);
+            ImGui::Separator();
+            ImGui::Checkbox("Chams (Wallhack)", &CounterFlame::chams);
+            ImGui::Checkbox("Custom Crosshair", &CounterFlame::customCrosshair);
+            ImGui::EndTabItem();
         }
-    }
-
-    template <typename T>
-    inline bool Write(uintptr_t address, const T& val) {
-        if (!address) return false;
-        mach_port_t task = mach_task_self();
-        vm_address_t targetPage = address & ~(vm_address_t)(PAGE_SIZE - 1);
         
-        kern_return_t kr = vm_protect(task, targetPage, PAGE_SIZE, FALSE, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
-        if (kr != KERN_SUCCESS) return false;
+        if (ImGui::BeginTabItem("Aimbot")) {
+            ImGui::Checkbox("Enable Aimbot", &CounterFlame::aimbot);
+            const char* bones[] = { "Head", "Neck", "Chest" };
+            ImGui::Combo("Target Bone", &CounterFlame::aimbone, bones, IM_ARRAYSIZE(bones));
+            ImGui::SliderFloat("FOV Radius", &CounterFlame::aimbotFov, 1.0f, 30.0f);
+            ImGui::Checkbox("Show FOV Circle", &CounterFlame::showFovCircle);
+            ImGui::SliderFloat("Smoothing", &CounterFlame::aimbotSmooth, 1.0f, 20.0f);
+            ImGui::Separator();
+            ImGui::Checkbox("No Recoil", &CounterFlame::noRecoil);
+            ImGui::Checkbox("Infinite Ammo", &CounterFlame::infiniteAmmo);
+            ImGui::Checkbox("Rapid Fire", &CounterFlame::rapidFire);
+            ImGui::EndTabItem();
+        }
+        
+        if (ImGui::BeginTabItem("Misc")) {
+            ImGui::Checkbox("God Mode", &CounterFlame::godMode);
+            ImGui::SliderFloat("Speed Multiplier", &CounterFlame::speedMultiplier, 1.0f, 3.0f);
+            ImGui::Separator();
+            ImGui::Checkbox("Fast Plant", &CounterFlame::fastPlant);
+            ImGui::Checkbox("Fast Defuse", &CounterFlame::fastDefuse);
+            ImGui::Checkbox("Infinite Money", &CounterFlame::infiniteMoney);
+            ImGui::Separator();
+            ImGui::SliderFloat("Camera FOV", &CounterFlame::fovChanger, 60.0f, 120.0f);
+            ImGui::EndTabItem();
+        }
 
-        *reinterpret_cast<T*>(address) = val;
+        if (ImGui::BeginTabItem("Skins")) {
+            ImGui::Text("Skin Changer");
+            const char* knives[] = { "Default", "Karambit", "M9 Bayonet", "Butterfly" };
+            ImGui::Combo("Knife", &CounterFlame::knifeIndex, knives, IM_ARRAYSIZE(knives));
+            const char* gloves[] = { "Default", "Vice", "Fade", "Imperial Plaid" };
+            ImGui::Combo("Gloves", &CounterFlame::gloveIndex, gloves, IM_ARRAYSIZE(gloves));
+            const char* skins[] = { "Default", "Dragon Lore", "Neo-Noir", "Howl" };
+            ImGui::Combo("Weapon Skin", &CounterFlame::weaponSkinIndex, skins, IM_ARRAYSIZE(skins));
+            ImGui::EndTabItem();
+        }
 
-        vm_protect(task, targetPage, PAGE_SIZE, FALSE, VM_PROT_READ | VM_PROT_EXECUTE);
-        return true;
+        ImGui::EndTabBar();
     }
+    ImGui::End();
 }
 
-// ==========================================
-// 3. UI, FLOATING TOGGLE & IMGUI MENU
-// ==========================================
-namespace menu {
-    inline void RenderFloatingToggle() {
-        ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | 
-                                 ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_AlwaysAutoResize;
+// Оригинальный указатель на метод отрисовки view / command buffer
+static void (*original_drawRect)(id self, SEL _cmd, void* rect) = nullptr;
 
-        ImGui::SetNextWindowPos(ImVec2(50, 100), ImGuiCond_FirstUseEver);
-        ImGui::SetNextWindowBgAlpha(0.65f);
-
-        ImGui::Begin("##FloatingToggleWindow", nullptr, flags);
-
-        ImVec4 neonColor = config::bRainbowAccent ? 
-            ImVec4(sinf(static_cast<float>(ImGui::GetTime()) * 2.0f) * 0.3f + 0.7f, 
-                   sinf(static_cast<float>(ImGui::GetTime()) * 2.0f + 2.094f) * 0.3f + 0.7f, 
-                   sinf(static_cast<float>(ImGui::GetTime()) * 2.0f + 4.188f) * 0.3f + 0.7f, 1.0f) : 
-            ImVec4(0.00f, 0.80f, 1.00f, 1.00f);
-
-        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.12f, 0.12f, 0.16f, 0.90f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.20f, 0.20f, 0.28f, 1.00f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, neonColor);
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 25.0f);
-
-        if (ImGui::Button(" CF ", ImVec2(48, 48))) {
-            config::bMenuVisible = !config::bMenuVisible;
-        }
-
-        ImGui::PopStyleVar();
-        ImGui::PopStyleColor(3);
-        ImGui::End();
+// Хукнутый метод отрисовки, который перехватывает каждый кадр игры
+void hooked_drawRect(id self, SEL _cmd, void* rect) {
+    // Вызываем оригинальный метод, чтобы игра не зависала
+    if (original_drawRect) {
+        original_drawRect(self, _cmd, rect);
     }
 
-    inline void RenderImGuiMenu() {
-        RenderFloatingToggle();
-        if (!config::bMenuVisible) return;
-
-        ImVec4 accentColor = config::bRainbowAccent ? 
-            ImVec4(sinf(static_cast<float>(ImGui::GetTime()) * 1.5f) * 0.3f + 0.7f, 
-                   sinf(static_cast<float>(ImGui::GetTime()) * 1.5f + 2.094f) * 0.3f + 0.7f, 
-                   sinf(static_cast<float>(ImGui::GetTime()) * 1.5f + 4.188f) * 0.3f + 0.7f, 1.0f) : 
-            ImVec4(0.00f, 0.80f, 1.00f, 1.00f);
-
-        ImGuiStyle& style = ImGui::GetStyle();
-        style.WindowRounding = 10.0f;
-        style.ChildRounding = 6.0f;
-        style.FrameRounding = 5.0f;
-        style.Colors[ImGuiCol_WindowBg]         = ImVec4(0.07f, 0.07f, 0.09f, 0.96f);
-        style.Colors[ImGuiCol_ChildBg]          = ImVec4(0.10f, 0.10f, 0.13f, 1.00f);
-        style.Colors[ImGuiCol_Border]           = ImVec4(0.20f, 0.20f, 0.26f, 0.80f);
-        style.Colors[ImGuiCol_CheckMark]        = accentColor;
-        style.Colors[ImGuiCol_SliderGrab]       = accentColor;
-        style.Colors[ImGuiCol_SliderGrabActive] = accentColor;
-
-        ImGui::SetNextWindowSize(ImVec2(620, 480), ImGuiCond_FirstUseEver);
-        ImGui::Begin("CounterFlame // Elite Mod Menu [v3.0]", &config::bMenuVisible, 
-                     ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize);
-
-        if (ImGui::BeginTabBar("MenuTabs")) {
-            // 1. VISUALS
-            if (ImGui::BeginTabItem("Visuals")) {
-                ImGui::Checkbox("Box ESP", &config::bEspBox);
-                ImGui::Checkbox("Skeleton ESP", &config::bEspSkeleton);
-                ImGui::Checkbox("Name & Health", &config::bEspName);
-                ImGui::Checkbox("Distance Tag", &config::bEspDistance);
-                ImGui::Checkbox("Mini-Radar", &config::bRadar);
-                ImGui::Checkbox("Chams (Wallhack)", &config::bChams);
-                ImGui::Checkbox("Custom Crosshair", &config::bCustomCrosshair);
-                if (config::bCustomCrosshair) {
-                    ImGui::Combo("Style", &config::iCrosshairStyle, "Dot\0Cross\0");
-                }
-                ImGui::EndTabItem();
-            }
-
-            // 2. AIMBOT
-            if (ImGui::BeginTabItem("Aimbot")) {
-                ImGui::Checkbox("Enable Aimbot", &config::bAimbot);
-                ImGui::SliderFloat("FOV Radius", &config::fAimbotFov, 1.0f, 30.0f, "%.1f deg");
-                ImGui::Checkbox("Show FOV Circle", &config::bShowFovCircle);
-                ImGui::SliderFloat("Smoothing", &config::fAimbotSmooth, 1.0f, 20.0f, "%.1f");
-                ImGui::Checkbox("No Recoil", &config::bNoRecoil);
-                ImGui::EndTabItem();
-            }
-
-            // 3. MISC
-            if (ImGui::BeginTabItem("Misc")) {
-                ImGui::Checkbox("God Mode", &config::bGodMode);
-                ImGui::Checkbox("Infinite Ammo", &config::bInfiniteAmmo);
-                ImGui::Checkbox("Speedhack", &config::bSpeedhack);
-                if (config::bSpeedhack) {
-                    ImGui::SliderFloat("Multiplier", &config::fSpeedMultiplier, 1.0f, 3.0f, "%.2fx");
-                }
-                ImGui::EndTabItem();
-            }
-
-            // 4. HARDCORE
-            if (ImGui::BeginTabItem("Hardcore")) {
-                ImGui::Checkbox("Auto-Win Round", &config::bAutoWin);
-                ImGui::Checkbox("Fast Plant & Defuse", &config::bFastPlantDefuse);
-                ImGui::Checkbox("Server Crash Flood", &config::bServerCrashFlood);
-                ImGui::Checkbox("Lag Switch", &config::bLagSwitch);
-                ImGui::Checkbox("Infinite Money", &config::bInfiniteMoney);
-                ImGui::Checkbox("Skin Changer", &config::bSkinChanger);
-                ImGui::EndTabItem();
-            }
-            ImGui::EndTabBar();
-        }
-        ImGui::End();
+    // Здесь происходит инициализация контекста ImGui и отрисовка поверх кадра игры
+    // (Требуется корректная связка с активным MTLCommandQueue и CAMetalLayer конкретного движка)
+    static bool imgui_initialized = false;
+    if (!imgui_initialized) {
+        IMGUI_CHECKVERSION();
+        ImGui::CreateContext();
+        ImGuiIO& io = ImGui::GetIO(); (void)io;
+        ImGui::StyleColorsDark();
+        imgui_initialized = true;
     }
+
+    // Рендер-луп ImGui в кадровом буфере
+    ImGui::NewFrame();
+    DrawImGuiMenu();
+    ImGui::Render();
+    // ImGui_ImplMetal_RenderDrawData(ImGui::GetDrawData(), commandBuffer, encoder);
 }
 
-// ==========================================
-// 4. MAIN THREAD & ENTRY POINT
-// ==========================================
-void MainThread() {
-    uintptr_t baseAddress = 0;
-    while (baseAddress == 0) {
-        baseAddress = memory::GetModuleBase("CounterFlame");
-        if (baseAddress == 0) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(500));
-        }
-    }
-
-    while (true) {
-        if (config::kGWorldOffset != 0) {
-            uintptr_t gWorld = memory::Read<uintptr_t>(baseAddress + config::kGWorldOffset);
-            if (gWorld && config::bAutoWin && config::kRoundManagerOffset != 0) {
-                uintptr_t roundMgr = memory::Read<uintptr_t>(baseAddress + config::kRoundManagerOffset);
-                if (roundMgr) {
-                    memory::Write<int32_t>(roundMgr + 0x40, 1);
-                }
+// Установка хука на графический движок через Objective-C Swizzling при загрузке библиотеки
+__attribute__((constructor)) void InitMetalHook() {
+    std::thread([]() {
+        // Ждем пока игра прогрузит классы UI
+        std::this_thread::sleep_for(std::chrono::seconds(2));
+        
+        Class viewClass = objc_getClass("MTKView");
+        if (viewClass) {
+            SEL selector = sel_registerName("drawRect:");
+            Method method = class_getInstanceMethod(viewClass, selector);
+            if (method) {
+                original_drawRect = (void(*)(id, SEL, void*))method_setImplementation(viewClass, (IMP)hooked_drawRect);
             }
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
-}
-
-__attribute__((constructor)) void DylibMain() {
-    std::thread(MainThread).detach();
+    }).detach();
 }
